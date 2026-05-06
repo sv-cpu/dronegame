@@ -52,7 +52,6 @@ const Input = (() => {
       touchX = e.clientX;
       active = true;
       tap = true;
-      dodge = true;
       Audio.resumeCtx();
     });
     canvas.addEventListener('mousemove', e => {

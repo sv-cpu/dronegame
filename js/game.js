@@ -128,7 +128,7 @@ const Game = (() => {
 
     if (state === 'title') {
       if (Input.consumeTap()) {
-        ScreenManager.startTransition(() => startLevel(0));
+        startLevel(0);
       }
       return;
     }
@@ -145,9 +145,9 @@ const Game = (() => {
     if (state.startsWith('interlude')) {
       if (Input.consumeTap()) {
         interludeTimer = 0;
-        if (state === 'interlude_1') ScreenManager.startTransition(() => startLevel(1));
-        else if (state === 'interlude_2') ScreenManager.startTransition(() => startLevel(2));
-        else if (state === 'interlude_3') ScreenManager.startTransition(() => startBoss());
+        if (state === 'interlude_1') startLevel(1);
+        else if (state === 'interlude_2') startLevel(2);
+        else if (state === 'interlude_3') startBoss();
         else if (state === 'interlude_boss') {
           state = 'victory';
           DanceAnimation.start(() => {});
@@ -185,7 +185,7 @@ const Game = (() => {
     }
 
     // Dodge on tap during gameplay
-    if (Input.consumeTap()) Player.triggerDodge();
+    if ((state === 'playing' || state === 'boss') && Input.consumeTap()) Player.triggerDodge();
 
     // update shake
     if (shakeTimer > 0) {
