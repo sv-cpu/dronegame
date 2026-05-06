@@ -9,6 +9,9 @@ const Player = (() => {
   let animTimer = 0;
   let shells = [];
   let scale = 2;
+  let dodgeTimer = 0;
+  let dodgeDir = 0;
+  let dodgeCooldown = 0;
 
   function reset() {
     x = 185;
@@ -19,17 +22,35 @@ const Player = (() => {
     animFrame = 0;
     animTimer = 0;
     shells = [];
+    dodgeTimer = 0;
+    dodgeDir = 0;
+    dodgeCooldown = 0;
+  }
+
+  function triggerDodge() {
+    if (dodgeCooldown > 0 || dodgeTimer > 0) return;
+    dodgeDir = x > 200 ? -1 : 1;
+    dodgeTimer = 15;
+    invincible = 20;
+    dodgeCooldown = 30;
   }
 
   function update() {
     if (Input.isActive()) {
-      x = Input.getX() - W * scale / 2;
+      const targetX = Input.getX() - W * scale / 2;
+      if (dodgeTimer <= 0) x = targetX;
     }
     if (x < 0) x = 0;
     if (x > 400 - W * scale) x = 400 - W * scale;
 
     if (invincible > 0) invincible--;
+    if (dodgeCooldown > 0) dodgeCooldown--;
     if (shootCooldown > 0) shootCooldown--;
+    if (dodgeTimer > 0) {
+      x += dodgeDir * 8;
+      dodgeTimer--;
+      if (dodgeTimer <= 0) dodgeDir = 0;
+    }
 
     if (shootCooldown > 0 && Math.random() < 0.4) {
       shells.push({
@@ -75,9 +96,20 @@ const Player = (() => {
     return { x, y, w: W * scale, h: H * scale };
   }
 
+  function isDodging() { return dodgeTimer > 0; }
+
   function draw(ctx) {
     if (invincible > 0 && (invincible % 6) < 3) return;
-    Sprites.draw(ctx, 'player', x, y, W * scale, H * scale);
+
+    let dx = x;
+    let dy = y;
+    let dw = W * scale;
+    let dh = H * scale;
+    if (dodgeTimer > 0) {
+      ctx.globalAlpha = 0.6;
+    }
+    Sprites.draw(ctx, 'player', dx, dy, dw, dh);
+    ctx.globalAlpha = 1;
 
     shells.forEach(s => {
       ctx.fillStyle = '#b8860b';
@@ -99,5 +131,5 @@ const Player = (() => {
     }
   }
 
-  return { reset, update, getShoot, hit, getRect, draw, drawLives };
+  return { reset, update, getShoot, hit, getRect, isDodging, triggerDodge, draw, drawLives };
 })();

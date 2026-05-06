@@ -5,6 +5,9 @@ const Input = (() => {
   let keyLeft = false;
   let keyRight = false;
   let kbX = 200;
+  let touchStartTime = 0;
+  let touchStartX = 0;
+  let dodge = false;
 
   function init(canvas) {
     canvas.addEventListener('touchstart', e => {
@@ -13,6 +16,9 @@ const Input = (() => {
       touchX = t.clientX;
       active = true;
       tap = true;
+      dodge = false;
+      touchStartTime = Date.now();
+      touchStartX = t.clientX;
       Audio.resumeCtx();
     }, { passive: false });
     canvas.addEventListener('touchmove', e => {
@@ -22,6 +28,9 @@ const Input = (() => {
     }, { passive: false });
     canvas.addEventListener('touchend', e => {
       e.preventDefault();
+      const dt = Date.now() - touchStartTime;
+      const dx = Math.abs(touchX - touchStartX);
+      if (dt < 180 && dx < 15) dodge = true;
       active = false;
     }, { passive: false });
     canvas.addEventListener('touchcancel', e => {
@@ -43,6 +52,7 @@ const Input = (() => {
       touchX = e.clientX;
       active = true;
       tap = true;
+      dodge = true;
       Audio.resumeCtx();
     });
     canvas.addEventListener('mousemove', e => {
@@ -67,6 +77,8 @@ const Input = (() => {
       return Math.max(0, Math.min(400, (touchX - rect.left) * scaleX));
     },
     isActive() { return active || keyLeft || keyRight; },
-    consumeTap() { const v = tap; tap = false; return v; }
+    consumeTap() { const v = tap; tap = false; return v; },
+    isDodge() { const v = dodge; dodge = false; return v; },
+    get touchX() { return touchX; },
   };
 })();

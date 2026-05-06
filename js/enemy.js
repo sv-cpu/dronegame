@@ -17,12 +17,13 @@ const Enemy = (() => {
 
   function setDifficulty(d) { difficulty = d; }
 
-  function spawn() {
+  function spawn(progress) {
     const type = Math.random() < 0.7 ? 'small' : 'medium';
     const t = TYPES[type];
     const sw = t.w * SCALE;
     const sh = t.h * SCALE;
-    const speed = 0.7 + Math.random() * 0.5 + difficulty * 0.05;
+    const speedMult = 0.7 + progress * 0.6;
+    const speed = (0.7 + Math.random() * 0.5 + difficulty * 0.05) * speedMult;
     const drift = (Math.random() - 0.5) * 1.2;
     const ex = 10 + Math.random() * (380 - sw);
     enemies.push({
@@ -31,12 +32,12 @@ const Enemy = (() => {
     });
   }
 
-  function update() {
+  function update(progress) {
     spawnTimer++;
-    const interval = Math.max(15, 45 - difficulty * 5);
+    const interval = Math.max(15, 45 - difficulty * 5 - progress * 10);
     if (spawnTimer >= interval) {
       spawnTimer = 0;
-      if (Math.random() < 0.65) spawn();
+      if (Math.random() < 0.65 + progress * 0.2) spawn(progress);
     }
 
     for (let i = enemies.length - 1; i >= 0; i--) {
@@ -61,6 +62,9 @@ const Enemy = (() => {
       Audio.explode();
       enemies.splice(index, 1);
       return true;
+    } else {
+      Particle.spawnHitSparks(e.x + e.w / 2, e.y + e.h / 2);
+      Audio.hit();
     }
     return false;
   }

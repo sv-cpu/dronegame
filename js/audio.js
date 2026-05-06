@@ -2,6 +2,7 @@ const Audio = (() => {
   let ctx = null;
   let musicEl = null;
   let musicId = null;
+  let _volume = 0.5;
 
   function getCtx() {
     if (!ctx) {
@@ -49,7 +50,7 @@ const Audio = (() => {
     el.loop = true;
     el.preload = 'auto';
     el.src = url;
-    el.volume = 0.5;
+    el.volume = _volume;
     el.play().catch(() => {});
     musicEl = el;
     musicId = id;
@@ -84,6 +85,8 @@ const Audio = (() => {
     },
     playMusic,
     stopMusic,
+    getVolume() { return _volume; },
+    setVolume(v) { _volume = Math.max(0, Math.min(1, v)); if (musicEl) musicEl.volume = _volume; },
     resumeCtx() {
       const c = getCtx();
       if (c.state === 'suspended') c.resume();

@@ -10,7 +10,11 @@ const Game = (() => {
   let bossBulletHitCooldown = 0;
   let bossDefeatTimer = 0;
   let interludeTimer = 0;
-  let interludeAutoDone = false;
+  let score = 0;
+  let shakeTimer = 0;
+  let shakeX = 0;
+  let shakeY = 0;
+  let paused = false;
 
   const INTERLUDE_TEXTS = {
     interlude_1: 'неплохо, но впереди еще\nопасный путь.\nСмени памперс и вперед!',
@@ -25,6 +29,12 @@ const Game = (() => {
     canvas.height = H;
     ctx = canvas.getContext('2d');
     Input.init(canvas);
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        if (state === 'playing' || state === 'boss') togglePause();
+      }
+    });
 
     const scr = 'assets/sprites/';
     Promise.all([
@@ -41,9 +51,18 @@ const Game = (() => {
     });
   }
 
+  function togglePause() {
+    if (paused) {
+      paused = false;
+    } else {
+      paused = true;
+    }
+  }
+
   function resetGame() {
     levelIndex = 0;
     bossStage = false;
+    score = 0;
     Player.reset();
     Enemy.reset();
     Boss.reset();
@@ -78,7 +97,7 @@ const Game = (() => {
 
   function startInterlude(id) {
     state = id;
-    while (Input.consumeTap()) {}  // clear buffered taps from gameplay
+    while (Input.consumeTap()) {}
     interludeTimer = 0;
   }
 
@@ -94,6 +113,10 @@ const Game = (() => {
     state = 'boss';
   }
 
+  function triggerShake(duration) {
+    shakeTimer = duration || 10;
+  }
+
   function loop() {
     update();
     draw();
@@ -104,7 +127,9 @@ const Game = (() => {
     Input.updateKb();
 
     if (state === 'title') {
-      if (Input.consumeTap()) startLevel(0);
+      if (Input.consumeTap()) {
+        ScreenManager.startTransition(() => startLevel(0));
+      }
       return;
     }
 
@@ -117,13 +142,12 @@ const Game = (() => {
       return;
     }
 
-    // Interlude states - only advance on tap
     if (state.startsWith('interlude')) {
       if (Input.consumeTap()) {
         interludeTimer = 0;
-        if (state === 'interlude_1') startLevel(1);
-        else if (state === 'interlude_2') startLevel(2);
-        else if (state === 'interlude_3') startBoss();
+        if (state === 'interlude_1') ScreenManager.startTransition(() => startLevel(1));
+        else if (state === 'interlude_2') ScreenManager.startTransition(() => startLevel(2));
+        else if (state === 'interlude_3') ScreenManager.startTransition(() => startBoss());
         else if (state === 'interlude_boss') {
           state = 'victory';
           DanceAnimation.start(() => {});
@@ -140,6 +164,37 @@ const Game = (() => {
         state = 'title';
       }
       return;
+    }
+
+    // Pause overlay
+    if (paused) {
+      if (Input.consumeTap()) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = 400 / rect.width;
+        const tx = (Input.touchX || 200 - rect.left) * scaleX;
+        const barX = (W - 150) / 2;
+        const barY = H / 2 + 5;
+        // volume slider
+        if (tx > barX && tx < barX + 150) {
+          const vol = (tx - barX) / 150;
+          Audio.setVolume(vol);
+        }
+      }
+      if (Input.isDodge && Input.isDodge()) togglePause();
+      return;
+    }
+
+    // Dodge on tap during gameplay
+    if (Input.consumeTap()) Player.triggerDodge();
+
+    // update shake
+    if (shakeTimer > 0) {
+      shakeTimer--;
+      shakeX = (Math.random() - 0.5) * 6;
+      shakeY = (Math.random() - 0.5) * 6;
+    } else {
+      shakeX = 0;
+      shakeY = 0;
     }
 
     // boss stage
@@ -172,6 +227,7 @@ const Game = (() => {
             b.y < pRect.y + pRect.h && b.y + 10 > pRect.y) {
           bossBulletHitCooldown = 20;
           const dead = Player.hit();
+          triggerShake(10);
           bBullets.splice(i, 1);
           if (dead) { Audio.lose(); Audio.stopMusic(); state = 'gameover'; return; }
         }
@@ -200,10 +256,10 @@ const Game = (() => {
 
     // normal level
     Player.update();
-    Enemy.update();
+    Enemy.update(levelProgress);
 
     const shot = Player.getShoot();
-    if (shot) { bullets.push({ x: shot.x, y: shot.y, vy: -6 }); Audio.shoot(); }
+    if (shot) { bullets.push({ x: shot.x, y: shot.y, vy: -7 }); Audio.shoot(); }
 
     for (let i = bullets.length - 1; i >= 0; i--) {
       bullets[i].y += bullets[i].vy;
@@ -218,7 +274,7 @@ const Game = (() => {
         if (b.x < e.x + e.w && b.x + 4 > e.x &&
             b.y < e.y + e.h && b.y + 4 > e.y) {
           bullets.splice(bi, 1);
-          Enemy.hit(ei);
+          if (Enemy.hit(ei)) score++;
           break;
         }
       }
@@ -231,6 +287,7 @@ const Game = (() => {
           e.y < pRect.y + pRect.h && e.y + e.h > pRect.y) {
         Enemy.remove(ei);
         const dead = Player.hit();
+        triggerShake(10);
         if (dead) { Audio.lose(); Audio.stopMusic(); state = 'gameover'; return; }
       }
     }
@@ -259,26 +316,31 @@ const Game = (() => {
   function draw() {
     ctx.clearRect(0, 0, W, H);
 
-    if (state === 'title') { ScreenManager.drawTitle(ctx, W, H); return; }
+    // screen shake
+    if (shakeTimer > 0) {
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+    }
+
+    if (state === 'title') { ScreenManager.drawTitle(ctx, W, H); shakeRestore(); return; }
 
     if (state === 'gameover') {
       drawLevelBackground();
       if (bossStage) Boss.draw(ctx);
-      ScreenManager.drawGameOver(ctx, W, H);
-      return;
+      ScreenManager.drawGameOver(ctx, W, H, score);
+      shakeRestore(); return;
     }
 
-    // Interlude draws over game background
     if (state.startsWith('interlude')) {
       drawLevelBackground();
       const text = INTERLUDE_TEXTS[state] || '';
-      ScreenManager.drawInterlude(ctx, W, H, text, null, interludeTimer);
-      return;
+      ScreenManager.drawInterlude(ctx, W, H, text);
+      shakeRestore(); return;
     }
 
     if (state === 'victory') {
       DanceAnimation.draw(ctx, W, H);
-      return;
+      shakeRestore(); return;
     }
 
     drawLevelBackground();
@@ -292,20 +354,33 @@ const Game = (() => {
 
     // HUD
     if (bossStage) {
-      ctx.fillStyle = '#e74c3c';
+      ctx.fillStyle = '#c0392b';
       ctx.font = 'bold 10px monospace';
       ctx.fillText('БОСС', 10, 14);
+      ctx.fillStyle = '#f1c40f';
+      ctx.font = '9px monospace';
+      ctx.fillText('' + score, 10, 50);
       Player.drawLives(ctx);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#fff';
       ctx.font = '10px monospace';
       ctx.fillText('HP: ' + Math.max(0, Boss.hp) + '/30', W - 10, 14);
       ctx.textAlign = 'left';
+      if (Boss.isRage && Boss.isRage()) {
+        ctx.fillStyle = '#ff6b6b';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚠ ЯРОСТЬ ⚠', W / 2, 30);
+        ctx.textAlign = 'left';
+      }
     } else {
       const lvl = Levels.getLevel(levelIndex);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 10px monospace';
       ctx.fillText((lvl ? lvl.name : ''), 10, 14);
+      ctx.fillStyle = '#f1c40f';
+      ctx.font = '9px monospace';
+      ctx.fillText('' + score, 10, 50);
       Player.drawLives(ctx);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#95a5a6';
@@ -313,6 +388,20 @@ const Game = (() => {
       ctx.fillText((levelProgress * 100 | 0) + '%', W - 10, 14);
       ctx.textAlign = 'left';
     }
+
+    // Pause overlay
+    if (paused) {
+      ScreenManager.drawPause(ctx, W, H);
+    }
+
+    // Transition overlay
+    ScreenManager.drawTransition(ctx, W, H);
+
+    shakeRestore();
+  }
+
+  function shakeRestore() {
+    if (shakeTimer > 0) ctx.restore();
   }
 
   function drawLevelBackground() {
